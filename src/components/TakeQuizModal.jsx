@@ -1,81 +1,92 @@
 // src/components/TakeQuizModal.jsx
-import React, { useState } from 'react';
-import { getQuizById } from '../api/quizService';
+import React, { useState, useEffect } from 'react';
+import { getQuizById, submitQuiz } from '../api/quizService';
 
-export default function TakeQuizModal({ show, onClose, initialQuizId = '' }) {
-  const [quizId, setQuizId] = useState(initialQuizId);
+export default function TakeQuizModal({ show, onClose, quizId }) {
   const [questions, setQuestions] = useState([]);
   const [currentQuestionIdx, setCurrentQuestionIdx] = useState(0);
-  const [selectedAnswers, setSelectedAnswers] = useState({}); // { [questionId]: "option1" }
+  const [selectedAnswers, setSelectedAnswers] = useState({}); // { [q.id]: "optionText" }
   const [loading, setLoading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
-  const [isSubmitted, setIsSubmitted] = useState(false);
+  const [scoreResult, setScoreResult] = useState(null);
+
+  // Automatically fetch questions on modal open using the passed ID or stored ID
+  useEffect(() => {
+    const targetId = quizId || localStorage.getItem('latestQuizId');
+    
+    if (show) {
+      if (targetId) {
+        loadQuestions(targetId);
+      } else {
+        setError("No Quiz found. Please click 'Create Quiz' first to generate a quiz!");
+      }
+    }
+  }, [show, quizId]);
 
   if (!show) return null;
 
-  const handleFetchQuiz = async (e) => {
-    e.preventDefault();
-    if (!quizId) return;
-
+  const loadQuestions = async (idToFetch) => {
     setLoading(true);
     setError(null);
-    setIsSubmitted(false);
+    setScoreResult(null);
 
     try {
-      const data = await getQuizById(quizId);
-      // Ensure data is parsed correctly if it arrived as a string or array
-      const parsedQuestions = typeof data === 'string' ? JSON.parse(data) : data;
+      const data = await getQuizById(idToFetch);
+      const questionList = typeof data === 'string' ? JSON.parse(data) : data;
 
-      if (Array.isArray(parsedQuestions) && parsedQuestions.length > 0) {
-        setQuestions(parsedQuestions);
+      if (Array.isArray(questionList) && questionList.length > 0) {
+        setQuestions(questionList);
         setCurrentQuestionIdx(0);
         setSelectedAnswers({});
       } else {
-        setError('No questions found for this Quiz ID.');
+        setError('No questions available for this quiz.');
       }
     } catch (err) {
-      setError(`Failed to fetch Quiz #${quizId}. Please verify backend connection.`);
+      setError(`Failed to load quiz. Verify backend server is running on localhost:8082.`);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleOptionSelect = (questionId, optionKey) => {
+  const handleOptionSelect = (questionId, optionText) => {
     setSelectedAnswers((prev) => ({
       ...prev,
-      [questionId]: optionKey,
+      [questionId]: optionText,
     }));
   };
 
-  const handleNext = () => {
-    if (currentQuestionIdx < questions.length - 1) {
-      setCurrentQuestionIdx((prev) => prev + 1);
-    }
-  };
+  // Submit responses to POST /quiz/submit
+  const handleSubmitQuiz = async () => {
+    setSubmitting(true);
+    setError(null);
 
-  const handlePrev = () => {
-    if (currentQuestionIdx > 0) {
-      setCurrentQuestionIdx((prev) => prev - 1);
-    }
-  };
+    // Exact payload format required by backend:
+    // [ { "id": 8, "response": "List" }, { "id": 5, "response": "false" } ]
+    const payload = questions.map((q) => ({
+      id: q.id,
+      response: selectedAnswers[q.id] || '',
+    }));
 
-  const handleSubmitQuiz = () => {
-    setIsSubmitted(true);
+    try {
+      const score = await submitQuiz(payload);
+      setScoreResult(score);
+    } catch (err) {
+      setError('Failed to submit quiz responses.');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const handleClose = () => {
     setQuestions([]);
-    setQuizDataNull();
+    setError(null);
+    setScoreResult(null);
+    setCurrentQuestionIdx(0);
     onClose();
   };
 
-  const setQuizDataNull = () => {
-    setQuestions([]);
-    setError(null);
-    setIsSubmitted(false);
-    setCurrentQuestionIdx(0);
-  };
-
+  const activeQuizId = quizId || localStorage.getItem('latestQuizId');
   const currentQ = questions[currentQuestionIdx];
 
   return (
@@ -88,48 +99,36 @@ export default function TakeQuizModal({ show, onClose, initialQuizId = '' }) {
         <div className="d-flex justify-content-between align-items-center mb-3 border-bottom border-secondary pb-2">
           <h4 className="fw-bold m-0 brand-text">
             <i className="bi bi-play-circle-fill me-2 text-accent"></i>
-            {questions.length > 0 ? `Quiz #${quizId}` : 'Take Quiz'}
+            {activeQuizId ? `Quiz #${activeQuizId}` : 'Take Quiz'}
           </h4>
           <button className="btn-close btn-close-white" onClick={handleClose}></button>
         </div>
 
-        {/* STEP 1: Quiz ID Input Form */}
-        {questions.length === 0 && (
-          <form onSubmit={handleFetchQuiz}>
-            {error && <div className="alert alert-danger py-2 fs-6">{error}</div>}
-
-            <div className="mb-4">
-              <label className="form-label text-light opacity-75 fw-semibold">Enter Quiz ID</label>
-              <div className="input-group">
-                <input
-                  type="text"
-                  className="form-control bg-dark text-white border-secondary"
-                  placeholder="e.g. 8"
-                  value={quizId}
-                  onChange={(e) => setQuizId(e.target.value)}
-                  required
-                />
-                <button type="submit" className="btn btn-iconic rounded-start-0" disabled={loading}>
-                  {loading ? (
-                    <span className="spinner-border spinner-border-sm"></span>
-                  ) : (
-                    'Start Quiz'
-                  )}
-                </button>
-              </div>
-            </div>
-          </form>
+        {/* Loading Spinner */}
+        {loading && (
+          <div className="text-center py-5">
+            <div className="spinner-border text-accent mb-3" style={{ width: '3rem', height: '3rem' }}></div>
+            <p className="text-light opacity-75">Loading quiz questions from server...</p>
+          </div>
         )}
 
-        {/* STEP 2: Interactive Question Screen */}
-        {questions.length > 0 && !isSubmitted && currentQ && (
+        {/* Error State */}
+        {error && !loading && (
+          <div className="text-center py-4">
+            <div className="alert alert-danger py-3 fs-6 mb-4">{error}</div>
+            <button className="btn btn-outline-light rounded-pill px-4" onClick={handleClose}>
+              Close
+            </button>
+          </div>
+        )}
+
+        {/* Questions View */}
+        {!loading && !error && questions.length > 0 && scoreResult === null && currentQ && (
           <div>
-            {/* Progress Bar */}
+            {/* Progress */}
             <div className="d-flex justify-content-between align-items-center mb-2 fs-6 text-light opacity-75">
-              <span>
-                Question {currentQuestionIdx + 1} of {questions.length}
-              </span>
-              <span>{Math.round(((currentQuestionIdx + 1) / questions.length) * 100)}% Completed</span>
+              <span>Question {currentQuestionIdx + 1} of {questions.length}</span>
+              <span>{Math.round(((currentQuestionIdx + 1) / questions.length) * 100)}%</span>
             </div>
             <div className="progress mb-4" style={{ height: '6px', backgroundColor: 'rgba(255,255,255,0.1)' }}>
               <div
@@ -142,33 +141,32 @@ export default function TakeQuizModal({ show, onClose, initialQuizId = '' }) {
             <div className="p-3 bg-dark rounded-3 border border-secondary mb-4">
               <h5 className="fw-bold mb-3">{currentQ.questionTitle}</h5>
 
-              {/* Options List */}
               <div className="d-flex flex-column gap-2">
                 {['option1', 'option2', 'option3', 'option4'].map((optKey, idx) => {
-                  const optionValue = currentQ[optKey];
-                  if (!optionValue) return null;
+                  const optionText = currentQ[optKey];
+                  if (!optionText) return null;
 
-                  const isSelected = selectedAnswers[currentQ.id] === optKey;
+                  const isSelected = selectedAnswers[currentQ.id] === optionText;
 
                   return (
                     <button
                       key={optKey}
                       type="button"
-                      className={`btn text-start p-3 rounded-3 border d-flex align-items-center justify-content-between transition-all ${
+                      className={`btn text-start p-3 rounded-3 border d-flex align-items-center justify-content-between ${
                         isSelected
                           ? 'btn-accent border-purple text-white shadow-sm'
                           : 'btn-outline-light border-secondary text-light'
                       }`}
                       style={{
-                        backgroundColor: isSelected ? 'rgba(170, 59, 255, 0.3)' : 'rgba(0,0,0,0.2)',
+                        backgroundColor: isSelected ? 'rgba(170, 59, 255, 0.35)' : 'rgba(0,0,0,0.2)',
                       }}
-                      onClick={() => handleOptionSelect(currentQ.id, optKey)}
+                      onClick={() => handleOptionSelect(currentQ.id, optionText)}
                     >
                       <div className="d-flex align-items-center gap-2">
                         <span className="badge rounded-circle bg-secondary me-2">
                           {String.fromCharCode(65 + idx)}
                         </span>
-                        <span>{optionValue}</span>
+                        <span>{optionText}</span>
                       </div>
                       {isSelected && <i className="bi bi-check-circle-fill text-accent fs-5"></i>}
                     </button>
@@ -177,48 +175,60 @@ export default function TakeQuizModal({ show, onClose, initialQuizId = '' }) {
               </div>
             </div>
 
-            {/* Navigation Controls */}
+            {/* Controls */}
             <div className="d-flex justify-content-between align-items-center">
               <button
                 className="btn btn-outline-light rounded-pill px-4"
-                onClick={handlePrev}
+                onClick={() => setCurrentQuestionIdx((p) => Math.max(0, p - 1))}
                 disabled={currentQuestionIdx === 0}
               >
                 <i className="bi bi-arrow-left me-1"></i> Previous
               </button>
 
               {currentQuestionIdx < questions.length - 1 ? (
-                <button className="btn btn-iconic rounded-pill px-4" onClick={handleNext}>
+                <button
+                  className="btn btn-iconic rounded-pill px-4"
+                  onClick={() => setCurrentQuestionIdx((p) => Math.min(questions.length - 1, p + 1))}
+                >
                   Next <i className="bi bi-arrow-right ms-1"></i>
                 </button>
               ) : (
-                <button className="btn btn-success rounded-pill px-4" onClick={handleSubmitQuiz}>
-                  <i className="bi bi-send-fill me-1"></i> Submit Quiz
+                <button
+                  className="btn btn-success rounded-pill px-4"
+                  onClick={handleSubmitQuiz}
+                  disabled={submitting}
+                >
+                  {submitting ? (
+                    <span className="spinner-border spinner-border-sm me-2"></span>
+                  ) : (
+                    <i className="bi bi-send-fill me-1"></i>
+                  )}
+                  Submit Quiz
                 </button>
               )}
             </div>
           </div>
         )}
 
-        {/* STEP 3: Submission Summary View */}
-        {isSubmitted && (
+        {/* Score Screen */}
+        {scoreResult !== null && (
           <div className="text-center py-4">
-            <div className="mb-3 text-success fs-1">
+            <div className="mb-3 text-warning fs-1">
               <i className="bi bi-trophy-fill"></i>
             </div>
-            <h4 className="fw-bold mb-2">Quiz Completed!</h4>
-            <p className="text-light opacity-75">
-              You answered {Object.keys(selectedAnswers).length} out of {questions.length} questions.
-            </p>
+            <h3 className="fw-bold mb-2">Quiz Completed!</h3>
+            <p className="text-light opacity-75">Your score evaluated by backend:</p>
 
-            <div className="d-flex gap-2 mt-4">
-              <button className="btn btn-outline-light w-50 rounded-pill" onClick={setQuizDataNull}>
-                Take Another Quiz
-              </button>
-              <button className="btn btn-iconic w-50" onClick={handleClose}>
-                Done
-              </button>
+            <div className="p-4 bg-dark rounded-4 border border-secondary my-4">
+              <h6 className="text-accent fw-bold text-uppercase tracking-wider mb-2">Total Score</h6>
+              <div className="display-3 fw-bold text-white mb-0">
+                {typeof scoreResult === 'object' ? JSON.stringify(scoreResult) : scoreResult}
+              </div>
             </div>
+
+            <button className="btn btn-iconic w-100" onClick={handleClose}>
+              Done
+            </button>
           </div>
         )}
       </div>

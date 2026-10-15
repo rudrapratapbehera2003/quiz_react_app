@@ -1,8 +1,7 @@
-// src/components/CreateQuizModal.jsx
 import React, { useState } from 'react';
 import { createQuiz } from '../api/quizService';
 
-export default function CreateQuizModal({ show, onClose, onQuizCreated }) {
+export default function CreateQuizModal({ show, onClose, onQuizCreatedAndStart }) {
   const [categoryName, setCategoryName] = useState('Java');
   const [numQuestions, setNumQuestions] = useState(2);
   const [title, setTitle] = useState('');
@@ -26,19 +25,27 @@ export default function CreateQuizModal({ show, onClose, onQuizCreated }) {
 
       const result = await createQuiz(payload);
       setCreatedQuizId(result.quizId);
-      if (onQuizCreated) onQuizCreated(result.quizId);
     } catch (err) {
-      setError(err.message || 'Failed to create quiz. Please check backend connection.');
+      setError(err.message || 'Failed to create quiz. Check backend console.');
     } finally {
       setLoading(false);
     }
   };
 
-  const resetForm = () => {
+  const handleClose = () => {
     setCreatedQuizId(null);
     setError(null);
     setTitle('');
     onClose();
+  };
+
+  const handleStartCreatedQuiz = () => {
+    const idToPass = createdQuizId;
+    handleClose();
+    // Directly trigger Take Quiz modal with this ID!
+    if (onQuizCreatedAndStart) {
+      onQuizCreatedAndStart(idToPass);
+    }
   };
 
   return (
@@ -48,7 +55,7 @@ export default function CreateQuizModal({ show, onClose, onQuizCreated }) {
           <h4 className="fw-bold m-0 brand-text">
             <i className="bi bi-plus-circle-fill me-2 text-accent"></i>Create Quiz
           </h4>
-          <button className="btn-close btn-close-white" onClick={resetForm}></button>
+          <button className="btn-close btn-close-white" onClick={handleClose}></button>
         </div>
 
         {createdQuizId ? (
@@ -57,7 +64,7 @@ export default function CreateQuizModal({ show, onClose, onQuizCreated }) {
               <i className="bi bi-check-circle-fill"></i>
             </div>
             <h5 className="fw-bold">Quiz Created Successfully!</h5>
-            <p className="text-light opacity-75">Share this Quiz ID with students:</p>
+            <p className="text-light opacity-75 mb-2">Generated Quiz ID:</p>
             <div className="p-3 rounded-3 bg-dark border border-secondary my-3 d-flex align-items-center justify-content-between">
               <span className="fs-4 fw-bold text-accent">ID: {createdQuizId}</span>
               <button
@@ -67,9 +74,15 @@ export default function CreateQuizModal({ show, onClose, onQuizCreated }) {
                 <i className="bi bi-clipboard me-1"></i>Copy
               </button>
             </div>
-            <button className="btn btn-iconic w-100 mt-2" onClick={resetForm}>
-              Done
-            </button>
+
+            <div className="d-flex gap-2 mt-4">
+              <button className="btn btn-outline-light w-50 rounded-pill" onClick={handleClose}>
+                Close
+              </button>
+              <button className="btn btn-iconic w-50" onClick={handleStartCreatedQuiz}>
+                Take Quiz Now <i className="bi bi-arrow-right ms-1"></i>
+              </button>
+            </div>
           </div>
         ) : (
           <form onSubmit={handleSubmit}>
@@ -80,7 +93,7 @@ export default function CreateQuizModal({ show, onClose, onQuizCreated }) {
               <input
                 type="text"
                 className="form-control bg-dark text-white border-secondary"
-                placeholder="e.g. Quiz questions for PSU students"
+                placeholder="e.g. Quiz questions for psu students"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 required
@@ -92,7 +105,7 @@ export default function CreateQuizModal({ show, onClose, onQuizCreated }) {
               <input
                 type="text"
                 className="form-control bg-dark text-white border-secondary"
-                placeholder="e.g. Java, Python, SQL"
+                placeholder="e.g. Java"
                 value={categoryName}
                 onChange={(e) => setCategoryName(e.target.value)}
                 required
@@ -113,17 +126,11 @@ export default function CreateQuizModal({ show, onClose, onQuizCreated }) {
             </div>
 
             <div className="d-flex gap-2">
-              <button type="button" className="btn btn-outline-light w-50 rounded-pill" onClick={resetForm}>
+              <button type="button" className="btn btn-outline-light w-50 rounded-pill" onClick={handleClose}>
                 Cancel
               </button>
               <button type="submit" className="btn btn-iconic w-50" disabled={loading}>
-                {loading ? (
-                  <>
-                    <span className="spinner-border spinner-border-sm me-2"></span>Creating...
-                  </>
-                ) : (
-                  'Generate Quiz'
-                )}
+                {loading ? <span className="spinner-border spinner-border-sm me-2"></span> : 'Generate Quiz'}
               </button>
             </div>
           </form>

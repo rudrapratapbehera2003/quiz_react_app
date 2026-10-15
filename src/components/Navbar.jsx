@@ -1,6 +1,6 @@
-import React from 'react'
+import React from 'react';
 
-export default function Navbar() {
+export default function Navbar({ onOpenCreate, onOpenTake }) {
   return (
     <nav className="navbar navbar-expand-lg navbar-dark navbar-glass fixed-top shadow-sm">
       <div className="container">
@@ -22,25 +22,33 @@ export default function Navbar() {
         </button>
 
         <div className="collapse navbar-collapse" id="navbarNav">
-          <ul className="navbar-nav ms-auto gap-lg-2 mt-2 mt-lg-0">
+          <ul className="navbar-nav ms-auto gap-lg-2 mt-2 mt-lg-0 align-items-lg-center">
             <li className="nav-item">
               <a className="nav-link active nav-custom-link" href="#">
                 <i className="bi bi-house-door me-1"></i> Home
               </a>
             </li>
             <li className="nav-item">
-              <a className="nav-link nav-custom-link" href="#">
+              <button 
+                type="button" 
+                className="nav-link nav-custom-link btn btn-link text-start text-decoration-none w-100" 
+                onClick={onOpenCreate}
+              >
                 <i className="bi bi-plus-circle me-1"></i> Create Quiz
-              </a>
+              </button>
             </li>
             <li className="nav-item">
-              <a className="nav-link nav-custom-link" href="#">
+              <button 
+                type="button" 
+                className="nav-link nav-custom-link btn btn-link text-start text-decoration-none w-100" 
+                onClick={onOpenTake}
+              >
                 <i className="bi bi-play-circle me-1"></i> Take Quiz
-              </a>
+              </button>
             </li>
           </ul>
         </div>
       </div>
     </nav>
-  )
+  );
 }
